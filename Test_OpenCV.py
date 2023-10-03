@@ -1,39 +1,64 @@
+#https://temugeb.github.io/opencv/python/2021/02/02/stereo-camera-calibration-and-triangulation.html
 import numpy as np
-import cv2
+import cv2 as cv
 
-# Taille des cases de l'échiquier en mm
-square_size = 6.75
-
-# Dimensions de l'échiquier (nombre de coins en largeur et en hauteur)
-chessboard_size = (8, 8)
-
-# Liste pour stocker les coins détectés dans les images
-image_points = []
-object_points = []
-
-image_paths = [
+images_names = [
     "photo_calibration/1.jpg",
+    "photo_calibration/2.jpg",
+    "photo_calibration/3.jpg",
+    "photo_calibration/4.jpg",
 ]
+images = []
+for imname in images_names:
+    im = cv.imread(imname, 1)
+    images.append(im)   
 
-# Boucle sur les images de calibration
-for image_path in image_paths:
-    # Chargez l'image
-    image = cv2.imread(image_path)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+ 
+rows = 7 #number of checkerboard rows.
+columns = 7 #number of checkerboard columns.
+world_scaling = 0.675 #change this to the real world square size. Or not.
+ 
+#coordinates of squares in the checkerboard world space
+objp = np.zeros((rows*columns,3), np.float32)
+objp[:,:2] = np.mgrid[0:rows,0:columns].T.reshape(-1,2)
+objp = world_scaling* objp
+ 
+ 
+#frame dimensions. Frames should be the same size.
+width = images[0].shape[1]
+height = images[0].shape[0]
+ 
+#Pixel coordinates of checkerboards
+imgpoints = [] # 2d points in image plane.
+ 
+#coordinates of the checkerboard in checkerboard world space.
+objpoints = [] # 3d point in real world space
+ 
+ 
+for frame in images:
+    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+ 
+    #find the checkerboard
+    ret, corners = cv.findChessboardCorners(gray, (rows, columns), None)
+ 
+    if ret == True:
+ 
+        #Convolution size used to improve corner detection. Don't make this too large.
+        conv_size = (11, 11)
+ 
+        #opencv can attempt to improve the checkerboard coordinates
+        corners = cv.cornerSubPix(gray, corners, conv_size, (-1, -1), criteria)
+        cv.drawChessboardCorners(frame, (rows,columns), corners, ret)
+        cv.imshow('img', frame)
+        k = cv.waitKey(0)
+ 
+        objpoints.append(objp)
+        imgpoints.append(corners)
 
-    # Tentez de détecter les coins de l'échiquier
-    ret, corners = cv2.findChessboardCorners(gray, chessboard_size, None)
-
-    if ret:
-        # Si les coins sont trouvés, ajoutez-les à la liste
-        image_points.append(corners)
-
-        # Générez les coordonnées 3D réelles des coins de l'échiquier
-        object_points.append(np.zeros((chessboard_size[0] * chessboard_size[1], 3), np.float32))
-        object_points[-1][:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2) * square_size
-
-# Maintenant, effectuez la calibration de la caméra
-ret, camera_matrix, distortion_coefficients, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, gray.shape[::-1], None, None)
-
-# Les résultats de calibration sont maintenant dans camera_matrix et distortion_coefficients
-np.savez('camera_calibration.npz', camera_matrix=camera_matrix, distortion_coefficients=distortion_coefficients)
+ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, (width, height), None, None)
+print(ret)
+print(mtx)
+print(dist)
+print(rvecs)
+print(tvecs)
